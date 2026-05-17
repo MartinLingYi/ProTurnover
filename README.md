@@ -2,7 +2,7 @@
 
 ProTurnover是基于Davinci Resolve API开发的一套Python脚本。它可以快速完成视效镜头标注、在离线工作流程下抽取VFX ID与VFX Plate EDL等常见视效交接工作。
 
-要开始使用，请首先在```PTAsset```目录下创建你自己的帧计数素材。创建方式可以参考[这个视频](https://www.bilibili.com/video/BV12z411b7uL/)。帧计数素材的文件名应该为```FrameCount_2KDCI_24P.mov```。目前尚未支持对其他规格的帧计数素材。
+要开始使用，请首先在```PTAsset```目录下创建你自己的帧计数素材。创建方式可以参考[这个视频](https://www.bilibili.com/video/BV12z411b7uL/)。帧计数素材的文件名应该为```FrameCount_2KDCI_24P.mov```。目前尚未支持其他规格的帧计数素材。
 
 ---
 
