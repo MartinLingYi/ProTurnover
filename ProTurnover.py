@@ -292,23 +292,41 @@ def on_export_shotlist():
         messagebox.showinfo("当前时间线没有视效镜头数据", f"选择一个有{WorkTimeline.TrackType.FXShot_mark.value}轨道的时间线，然后ProTurnover才能读取视效镜头数据。")
         return
 
-    shotlist: list[str] = [f"# VFX Shot List of {exp_timeline.timeline.GetName()}", "|VFX ID|Description|Cut In|VFX Start|VFX End|Cut Out|", "|:---|:---|:---|:---|:---|:---|"]
+    shotlist: dict[str, dict[str, Any]]  = {}
     vfx_titles = exp_timeline.get_track_clips(title_tracks)
     for vt in vfx_titles:
         mark_inout = vt.GetMediaPoolItem().GetMarkInOut()
         mi = mark_inout["video"]["in"]
         mo = mark_inout["video"]["out"] + 1
-        shotlist.append(f"|**{vt.GetName()}**|{vt.GetMediaPoolItem().GetClipProperty("Comments")}|{vt.GetSourceStartFrame()}|{mi}|{mo}|{vt.GetSourceEndFrame()}|")
-    shotlist += ["---", f"Total Shot Count: **{len(vfx_titles)}**"]
+        shotlist[vt.GetName()] = {
+            "Mark In": mi,
+            "Mark Out": mo,
+            "Cut In": vt.GetSourceStartFrame(),
+            "Cut Out": vt.GetSourceEndFrame(),
+            "Comments": vt.GetMediaPoolItem().GetClipProperty("Comments"),
+            "VFX Shot": vt.GetMediaPoolItem().GetClipProperty("VFX Shot"),
+            "VFX Markers": vt.GetMediaPoolItem().GetClipProperty("VFX Markers"),
+            "VFX Notes": vt.GetMediaPoolItem().GetClipProperty("VFX Notes")
+        }
+
 
     tgt_path = filedialog.asksaveasfilename(
         defaultextension=".md",
-        filetypes=([("Markdown", ".md")])
+        filetypes=([("简要报告", ".md"),("全部镜头数据",".csv")])
     )
 
-    with open(tgt_path, "w") as shotlist_report:
-        for line in shotlist:
+    with open(tgt_path, "w", encoding="utf-8") as shotlist_report:
+        if tgt_path.endswith(".md"):
+            output: list[str] = [f"# VFX Shot List of {exp_timeline.timeline.GetName()}", "|VFX ID|Description|Cut In|VFX Start|VFX End|Cut Out|", "|:---|:---|:---|:---|:---|:---|"]
+            for vt in shotlist: output.append(f"|**{vt}**|{shotlist[vt]["Comments"]}|{shotlist[vt]["Cut In"]}|{shotlist[vt]["Mark In"]}|{shotlist[vt]["Mark Out"]}|{shotlist[vt]["Cut Out"]}|")
+            output += ["---", f"Total Shot Count: **{len(vfx_titles)}**"]
+        if tgt_path.endswith(".csv"):
+            messagebox.showinfo("尚未支持","ProTurnover尚未添加对 CSV 的支持。")
+            shotlist_report.close()
+            return
+        for line in output:
             shotlist_report.write(f"{line}\n")
+        shotlist_report.close()
 
 
 
