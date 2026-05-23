@@ -51,12 +51,14 @@ while True:
         messagebox.showinfo("没有搜索结果",f"没有找到任何包含{tgt_clip_name}的片段。")
         break
 
+    if len(results) <= p : break
+
     p_clip = results[p]
     if p_clip:
         tl.SetCurrentTimecode(Utils.PTLib.to_time_code(p_clip.GetStart(), fps))
         p+=1
         s_stat ="已完成" if search_finished else "进行中"
-        if not messagebox.askyesno("前往下一个匹配片段？", f"目前是第{p - 1}个匹配片段，目前搜索到{len(results)}个片段。搜索{s_stat}。"): break
+        if not messagebox.askyesno("前往下一个匹配片段？", f"目前是第{p}个匹配片段，目前搜索到{len(results)}个片段。搜索{s_stat}。"): break
 
 
 
