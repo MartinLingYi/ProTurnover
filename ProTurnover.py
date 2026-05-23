@@ -269,6 +269,7 @@ def on_extract_timeline():
             defaultextension=".edl",
             filetypes=[(f"发送给DI的素材EDL（带{handle_var.get()}帧余量）", ".edl")],
         )
+        if not tgt_path: return
         di_edl.save_to(tgt_path)
 
 
@@ -314,6 +315,7 @@ def on_export_shotlist():
         defaultextension=".md",
         filetypes=([("简要报告", ".md"),("全部镜头数据",".csv")])
     )
+    if not tgt_path: return
 
     with open(tgt_path, "w", encoding="utf-8") as shotlist_report:
         if tgt_path.endswith(".md"):
