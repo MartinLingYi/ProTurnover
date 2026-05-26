@@ -132,18 +132,25 @@ def on_mark_shot():
                                      f"{vt.GetName()}不是与命名规则一致的视效镜头标记。请重命名此片段后重试。")
                 return
             vfx_title_idict[vt.GetStart()] = shot_index
-        # 排序后的in point keys
-        vfx_title_ikeys = sorted(vfx_title_idict.keys())
 
     vfx_premarks = work_timeline.get_track_clips(vfx_premark_tracks)
+    # Premark的镜头也做分析
+    for premark in vfx_premarks:
+        if not premark.GetClipEnabled(): continue
+        if premark.GetName()[0:2] == "PM": continue
+        shot_index = Utils.PTLib.get_shot_index(name_rule, premark.GetName())
+        if not shot_index: continue
+        vfx_title_idict[premark.GetStart()] = shot_index
+    vfx_title_ikeys = sorted(vfx_title_idict.keys())
+
     last_shot_index = 0
     for premark in vfx_premarks:
         pm_name = premark.GetName()
         # 跳过已标注镜头号的片段
         if pm_name[0:2] != "PM":
-            last_shot_index = Utils.PTLib.get_shot_index(name_rule, premark.GetName())
+            last_shot_index = Utils.PTLib.get_shot_index(name_rule, pm_name)
             if not last_shot_index:
-                messagebox.showerror("无法识别此片段",f"{premark.GetName()}不是与命名规则一致的视效镜头标记，也不是有效的预标记片段。请重命名此片段后重试。")
+                messagebox.showerror("无法识别此片段",f"{pm_name}不是与命名规则一致的视效镜头标记，也不是有效的预标记片段。请重命名此片段后重试。")
                 return
             continue
 
@@ -163,7 +170,11 @@ def on_mark_shot():
         # 否则开始推理镜头号
         shot_index: int
         lc, nc = Utils.PTLib.find_neighbors(premark.GetStart(), vfx_title_ikeys)
-        if not nc or not lc: shot_index = last_shot_index + 10 # 前后没有片段，说明是新增镜头
+
+        if not nc and not lc:
+            shot_index = 10 # 是第一个片段
+        elif lc and not nc:
+            shot_index = max(vfx_title_idict[lc], last_shot_index) + 10  # 在尾端，直接+10
         else:
         # 否则视为插入镜头
             if nc == lc : shot_index = vfx_title_idict[nc] + 1
