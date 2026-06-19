@@ -171,8 +171,10 @@ def on_mark_shot():
         shot_index: int
         lc, nc = Utils.PTLib.find_neighbors(premark.GetStart(), vfx_title_ikeys)
 
-        if not nc and not lc:
-            shot_index = 10 # 是第一个片段
+        if not nc and not lc and last_shot_index == 0:
+            shot_index = 10 # 没有前序标注，是第一个片段
+        elif not nc and not lc:
+            shot_index = last_shot_index + 10 # 没有前序标注，后续片段
         elif lc and not nc:
             shot_index = max(vfx_title_idict[lc], last_shot_index) + 10  # 在尾端，直接+10
         else:
