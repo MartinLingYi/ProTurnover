@@ -21,6 +21,7 @@ def get_fx_data(_fx_timeline: WorkTimeline, _with_audio_clip: bool = True) -> di
     titles = _fx_timeline.get_track_clips(title_tracks)
     clips = _fx_timeline.get_track_clips(_fx_timeline.get_tracks(WorkTimeline.TrackType.Drama))
     overlays = _fx_timeline.get_track_clips(_fx_timeline.get_tracks(WorkTimeline.TrackType.Overlay))
+    refs = _fx_timeline.get_track_clips(_fx_timeline.get_tracks(WorkTimeline.TrackType.Reference))
     audios = _fx_timeline.get_all_clips("audio")
 
     ret: dict[str, list["TimelineItem"]] = {}
@@ -37,6 +38,8 @@ def get_fx_data(_fx_timeline: WorkTimeline, _with_audio_clip: bool = True) -> di
             linked_clips += Utils.PTLib.get_clips_in_range(audios, title_range)
         if len(overlays)>0 :
             linked_clips += Utils.PTLib.get_clips_in_range(overlays, title_range)
+        if len(refs)>0 :
+            linked_clips += Utils.PTLib.get_clips_in_range(refs, title_range)
 
         ret[title.GetName()] = linked_clips
     return ret
