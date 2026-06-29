@@ -64,6 +64,7 @@ work_timeline = WorkTimeline(current_timeline)
 work_mp = WorkMediaPool(media_pool)
 for f in WorkMediaPool.WorkFolderType:
     work_mp.create_folder(f)
+
 # 加载资源
 env_path = Utils.PTLib.get_script_dir()
 print(f"Script at {env_path}")
@@ -343,6 +344,22 @@ def on_export_shotlist():
             shotlist_report.write(f"{line}\n")
         shotlist_report.close()
 
+def on_resync_clip_properties():
+    tgt_track = target_track_combobox.get()
+    if not tgt_track: return
+    tgt_track_index = work_timeline.video_tracks.index(tgt_track) + 1
+    tgt_clips = work_timeline.get_track_clips([tgt_track_index])
+    if len(tgt_clips) == 0: return
+
+    from_clips: list["TimelineItem"] = work_timeline.get_track_clips(work_timeline.get_tracks(work_timeline.TrackType.Drama))
+    for clip in tgt_clips:
+        r = range(clip.GetStart(), clip.GetEnd(), 1)
+        src_clips = Utils.PTLib.get_clips_in_range(from_clips, r)
+        if len(src_clips) == 0: continue
+        src_clip = src_clips[0]
+        src_properties: dict[str, Any] = src_clip.GetProperty()
+        for (k, v) in src_properties.items():
+            clip.SetProperty(k, v)
 
 
 
@@ -390,6 +407,17 @@ name_rule_entry = ttk.Entry(
 )
 name_rule_entry.pack(anchor="w", pady=(0, 15))
 
+target_track_label = ttk.Label(
+    left_frame,
+    text="目标轨道"
+)
+target_track_label.pack(anchor="w", pady=(0, 5))
+target_track_combobox = ttk.Combobox(
+    left_frame,
+    width=28,
+)
+target_track_combobox.pack(anchor="w", pady=(0, 15))
+target_track_combobox["values"] = work_timeline.video_tracks
 
 
 # 预留帧余量
@@ -459,6 +487,14 @@ extract_timeline_btn = ttk.Button(
     text="抽取时间线",
     width=btn_width,
     command=on_extract_timeline
+)
+extract_timeline_btn.pack(pady=(0, 10))
+
+extract_timeline_btn = ttk.Button(
+    right_frame,
+    text="回套片段属性",
+    width=btn_width,
+    command=on_resync_clip_properties
 )
 extract_timeline_btn.pack(pady=(0, 40))
 

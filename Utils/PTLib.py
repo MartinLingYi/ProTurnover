@@ -164,6 +164,13 @@ class WorkTimeline:
     def video_track_count(self): return self.timeline.GetTrackCount("video")
     @property
     def audio_track_count(self): return self.timeline.GetTrackCount("audio")
+    @property
+    def video_tracks(self) -> list[str]:
+        ret: list[str] = []
+        for i in range(1, self.video_track_count + 1):
+            tn = f"V{i}/{self.timeline.GetTrackName("video", i)}"
+            ret.append(tn)
+        return ret
 
     def get_track_index(self, track_name: str) -> int:
         count = self.timeline.GetTrackCount("video")
