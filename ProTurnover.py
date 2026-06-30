@@ -82,7 +82,11 @@ print(work_mp.pt_source)
 # 右侧按钮
 # =========================
 
+def on_combox_refresh():
+    target_track_combobox["values"] = work_timeline.video_tracks
+
 def on_pre_mark():
+
     # 预标注视效镜头
     drama_clip_tracks = work_timeline.get_tracks(WorkTimeline.TrackType.Drama)
     drama_clips: list["TimelineItem"] = work_timeline.get_track_clips(drama_clip_tracks)
@@ -95,12 +99,20 @@ def on_pre_mark():
         marked_clip_sets.append({"name": marked_clip.GetName(), "in": marked_clip.GetStart(), "out": marked_clip.GetEnd()})
 
     premark_range = Utils.PTLib.merge_intervals(marked_clip_sets)
-    tgt_track = work_timeline.create_track(WorkTimeline.TrackType.FXShot_premark)
+    tgt_track: int
+    tgt = target_track_combobox.get()
+    if tgt and tgt in work_timeline.video_tracks:
+        tgt_track = work_timeline.video_tracks.index(tgt)+1
+    else:
+        tgt_track = work_timeline.create_track(WorkTimeline.TrackType.FXShot_premark)
+
     for r in premark_range:
         cut_in = 1001 + handle_var.get()
         pmi = work_mp.media_pool.AppendToTimeline([Utils.PTLib.clipinfo_of(work_mp.get_source("FrameCounter_24P"), cut_in, cut_in + r["out"] - r["in"], 1,tgt_track, r["in"])])
         if len(pmi) != 0:
             pmi[0].SetName("PM_FXType=")
+
+    target_track_combobox.set("")
 
 
 def on_mark_shot():
@@ -121,7 +133,10 @@ def on_mark_shot():
 
     vfx_title_tracks = work_timeline.get_tracks(WorkTimeline.TrackType.FXShot_mark)
     vfx_premark_tracks = work_timeline.get_tracks(WorkTimeline.TrackType.FXShot_premark)
-    print(vfx_title_tracks, vfx_premark_tracks)
+    tgt = target_track_combobox.get()
+    if tgt and tgt in work_timeline.video_tracks: # 如果有选择轨道，将目标轨道也加入Titles计算
+        vfx_title_tracks.append(work_timeline.video_tracks.index(tgt)+1)
+
     vfx_title_idict: dict[int, int] = {}
     vfx_title_ikeys: list[int] = []
     if len(vfx_title_tracks) != 0:
@@ -197,6 +212,8 @@ def on_mark_shot():
         premark.SetName(shot_name)
         last_shot_index = shot_index
 
+    target_track_combobox.set("")
+
 
 def on_generate_subclip():
     pt_tracks = work_timeline.get_tracks(WorkTimeline.TrackType.FXShot_premark)
@@ -236,7 +253,13 @@ def on_extract_timeline():
 
     if not messagebox.askyesno("现在扫描片段？","选择继续将立刻扫描并禁用不必要的片段。"): return
 
-    title_tracks = fx_timeline.get_tracks(WorkTimeline.TrackType.FXShot_mark)
+    tgt_track = target_track_combobox.get()
+    title_tracks: list[int]
+    if tgt_track and tgt_track in work_timeline.video_tracks:
+        title_tracks = [work_timeline.video_tracks.index(tgt_track)+1]
+    else:
+        title_tracks = fx_timeline.get_tracks(WorkTimeline.TrackType.FXShot_mark)
+
     if len(title_tracks) == 0:
         messagebox.showinfo(f"没有检测到{WorkTimeline.TrackType.FXShot_mark}轨道",f"ProTurnover需要从{WorkTimeline.TrackType.FXShot_mark}中读取VFX Title信息。")
         return
@@ -288,6 +311,7 @@ def on_extract_timeline():
         )
         if not tgt_path: return
         di_edl.save_to(tgt_path)
+    target_track_combobox.set("")
 
 
 
@@ -350,6 +374,9 @@ def on_export_shotlist():
 def on_resync_clip_properties():
     tgt_track = target_track_combobox.get()
     if not tgt_track: return
+    if tgt_track not in work_timeline.video_tracks:
+        messagebox.showinfo("目标轨道不存在",f"此时间线中没有轨道“{tgt_track}”。")
+        return
     tgt_track_index = work_timeline.video_tracks.index(tgt_track) + 1
     tgt_clips = work_timeline.get_track_clips([tgt_track_index])
     if len(tgt_clips) == 0: return
@@ -363,6 +390,7 @@ def on_resync_clip_properties():
         src_properties: dict[str, Any] = src_clip.GetProperty()
         for (k, v) in src_properties.items():
             clip.SetProperty(k, v)
+    target_track_combobox.set("")
 
 
 
@@ -418,9 +446,10 @@ target_track_label.pack(anchor="w", pady=(0, 5))
 target_track_combobox = ttk.Combobox(
     left_frame,
     width=28,
+    postcommand=on_combox_refresh
 )
 target_track_combobox.pack(anchor="w", pady=(0, 15))
-target_track_combobox["values"] = work_timeline.video_tracks
+
 
 
 # 预留帧余量
