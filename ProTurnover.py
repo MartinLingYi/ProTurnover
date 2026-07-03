@@ -16,8 +16,8 @@ if TYPE_CHECKING:
     from davinci_resolve import *
 
 
-def get_fx_data(_fx_timeline: WorkTimeline, _with_audio_clip: bool = True) -> dict[str, list["TimelineItem"]]:
-    title_tracks = _fx_timeline.get_tracks(WorkTimeline.TrackType.FXShot_mark)
+def get_fx_data(_fx_timeline: WorkTimeline, _title_tracks: list[int], _with_audio_clip: bool = True) -> dict[str, list["TimelineItem"]]:
+    title_tracks = _title_tracks
     titles = _fx_timeline.get_track_clips(title_tracks)
     clips = _fx_timeline.get_track_clips(_fx_timeline.get_tracks(WorkTimeline.TrackType.Drama))
     overlays = _fx_timeline.get_track_clips(_fx_timeline.get_tracks(WorkTimeline.TrackType.Overlay))
@@ -264,7 +264,7 @@ def on_extract_timeline():
         messagebox.showinfo(f"没有检测到{WorkTimeline.TrackType.FXShot_mark}轨道",f"ProTurnover需要从{WorkTimeline.TrackType.FXShot_mark}中读取VFX Title信息。")
         return
 
-    fx_datas = get_fx_data(fx_timeline)
+    fx_datas = get_fx_data(fx_timeline, title_tracks)
 
     all_linked_clips_uuid = []
     for data in fx_datas:
@@ -282,7 +282,7 @@ def on_extract_timeline():
         if not clip.GetClipEnabled(): to_delete.append(clip)
     fx_timeline.timeline.DeleteClips(to_delete)
 
-    fx_datas = get_fx_data(fx_timeline, False)
+    fx_datas = get_fx_data(fx_timeline,title_tracks, False)
     for data in fx_datas:
         index = 1
         for clip in fx_datas[data]:
@@ -323,13 +323,20 @@ def on_pack_selected_clips():
 
     mp_root = work_mp.media_pool.GetCurrentFolder()
     for mp in mpi:
+        mp.SetMetadata("VFX Shot #", mp.GetName())
         tgt = work_mp.media_pool.AddSubFolder(mp_root, f"{mp.GetName()}")
         work_mp.media_pool.MoveClips([mp], tgt)
 
 
 def on_export_shotlist():
+    tgt_track = target_track_combobox.get()
+
     exp_timeline = WorkTimeline(proj.GetCurrentTimeline())
-    title_tracks = exp_timeline.get_tracks(WorkTimeline.TrackType.FXShot_mark)
+    title_tracks: list[int]
+    if tgt_track and tgt_track in work_timeline.video_tracks:
+        title_tracks = [work_timeline.video_tracks.index(tgt_track) + 1]
+    else:
+        title_tracks = exp_timeline.get_tracks(WorkTimeline.TrackType.FXShot_mark)
     if len(title_tracks) == 0:
         messagebox.showinfo("当前时间线没有视效镜头数据", f"选择一个有{WorkTimeline.TrackType.FXShot_mark.value}轨道的时间线，然后ProTurnover才能读取视效镜头数据。")
         return
@@ -346,7 +353,7 @@ def on_export_shotlist():
             "Cut In": vt.GetSourceStartFrame(),
             "Cut Out": vt.GetSourceEndFrame(),
             "Comments": vt.GetMediaPoolItem().GetClipProperty("Comments"),
-            "VFX Shot": vt.GetMediaPoolItem().GetClipProperty("VFX Shot"),
+            "VFX Shot #": vt.GetMediaPoolItem().GetClipProperty("VFX Shot #"),
             "VFX Markers": vt.GetMediaPoolItem().GetClipProperty("VFX Markers"),
             "VFX Notes": vt.GetMediaPoolItem().GetClipProperty("VFX Notes")
         }
@@ -358,18 +365,33 @@ def on_export_shotlist():
     )
     if not tgt_path: return
 
-    with open(tgt_path, "w", encoding="utf-8") as shotlist_report:
-        if tgt_path.endswith(".md"):
-            output: list[str] = [f"# VFX Shot List of {exp_timeline.timeline.GetName()}", "|VFX ID|Description|Cut In|VFX Start|VFX End|Cut Out|", "|:---|:---|:---|:---|:---|:---|"]
-            for vt in shotlist: output.append(f"|**{vt}**|{shotlist[vt]["Comments"]}|{shotlist[vt]["Cut In"]}|{shotlist[vt]["Mark In"]}|{shotlist[vt]["Mark Out"]}|{shotlist[vt]["Cut Out"]}|")
-            output += ["---", f"Total Shot Count: **{len(vfx_titles)}**"]
-        if tgt_path.endswith(".csv"):
-            messagebox.showinfo("尚未支持","ProTurnover尚未添加对 CSV 的支持。")
+    if tgt_path.endswith(".md"):
+        output: list[str] = [f"# VFX Shot List of {exp_timeline.timeline.GetName()}",
+                             "|VFX ID|Description|Cut In|VFX Start|VFX End|Cut Out|", "|:---|:---|:---|:---|:---|:---|"]
+        for vt in shotlist: output.append(
+            f"|**{vt}**|{shotlist[vt]["Comments"]}|{shotlist[vt]["Cut In"]}|{shotlist[vt]["Mark In"]}|{shotlist[vt]["Mark Out"]}|{shotlist[vt]["Cut Out"]}|")
+        output += ["---", f"Total Shot Count: **{len(vfx_titles)}**"]
+
+        with open(tgt_path, "w", encoding="utf-8") as shotlist_report:
+            for line in output:
+                shotlist_report.write(f"{line}\n")
             shotlist_report.close()
-            return
-        for line in output:
-            shotlist_report.write(f"{line}\n")
-        shotlist_report.close()
+
+    if tgt_path.endswith(".csv"):
+        csv_head = "Name"
+        for i in next(iter(shotlist.values())).keys(): csv_head += f",{i}"
+        output: list[str] = [csv_head]
+        for vt in shotlist:
+            csv_item: str = vt
+            for k in shotlist[vt]: csv_item += f",{shotlist[vt][k]}"
+            output.append(csv_item)
+
+        with open(tgt_path, "w", encoding="utf-8-sig") as shotlist_report:
+            for line in output:
+                shotlist_report.write(f"{line}\n")
+            shotlist_report.close()
+
+
 
 def on_resync_clip_properties():
     tgt_track = target_track_combobox.get()
