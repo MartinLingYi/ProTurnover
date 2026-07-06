@@ -236,6 +236,35 @@ class WorkTimeline:
         track_name = _type.value
         return self.get_tracks_via_name(track_name, "video")
 
+    def get_fx_data(self, _target_tracks: list[int], _with_audio_clip: bool = True) -> dict[str, list["TimelineItem"]]:
+        _fx_timeline = self
+        title_tracks = _target_tracks
+        titles = _fx_timeline.get_track_clips(title_tracks)
+        clips = _fx_timeline.get_track_clips(_fx_timeline.get_tracks(WorkTimeline.TrackType.Drama))
+        overlays = _fx_timeline.get_track_clips(_fx_timeline.get_tracks(WorkTimeline.TrackType.Overlay))
+        refs = _fx_timeline.get_track_clips(_fx_timeline.get_tracks(WorkTimeline.TrackType.Reference))
+        audios = _fx_timeline.get_all_clips("audio")
+
+        ret: dict[str, list["TimelineItem"]] = {}
+        # 扫描所需片段
+        for title in titles:
+            title_in = title.GetStart()
+            title_out = title.GetEnd()
+            title_range = range(title_in, title_out, 1)
+
+            linked_clips: list["TimelineItem"] = []
+            if len(clips) > 0:
+                linked_clips += get_clips_in_range(clips, title_range)
+            if len(audios) > 0 and _with_audio_clip:
+                linked_clips += get_clips_in_range(audios, title_range)
+            if len(overlays) > 0:
+                linked_clips += get_clips_in_range(overlays, title_range)
+            if len(refs) > 0:
+                linked_clips += get_clips_in_range(refs, title_range)
+
+            ret[title.GetName()] = linked_clips
+        return ret
+
     def create_track(self, _type: TrackType) -> int:
         ret = -1
         match _type:

@@ -16,36 +16,13 @@ if TYPE_CHECKING:
     from davinci_resolve import *
 
 
-def get_fx_data(_fx_timeline: WorkTimeline, _title_tracks: list[int], _with_audio_clip: bool = True) -> dict[str, list["TimelineItem"]]:
-    title_tracks = _title_tracks
-    titles = _fx_timeline.get_track_clips(title_tracks)
-    clips = _fx_timeline.get_track_clips(_fx_timeline.get_tracks(WorkTimeline.TrackType.Drama))
-    overlays = _fx_timeline.get_track_clips(_fx_timeline.get_tracks(WorkTimeline.TrackType.Overlay))
-    refs = _fx_timeline.get_track_clips(_fx_timeline.get_tracks(WorkTimeline.TrackType.Reference))
-    audios = _fx_timeline.get_all_clips("audio")
 
-    ret: dict[str, list["TimelineItem"]] = {}
-    # 扫描所需片段
-    for title in titles:
-        title_in = title.GetStart()
-        title_out = title.GetEnd()
-        title_range = range(title_in, title_out, 1)
 
-        linked_clips: list["TimelineItem"] = []
-        if len(clips) >0 :
-            linked_clips += Utils.PTLib.get_clips_in_range(clips, title_range)
-        if len(audios)>0 and _with_audio_clip :
-            linked_clips += Utils.PTLib.get_clips_in_range(audios, title_range)
-        if len(overlays)>0 :
-            linked_clips += Utils.PTLib.get_clips_in_range(overlays, title_range)
-        if len(refs)>0 :
-            linked_clips += Utils.PTLib.get_clips_in_range(refs, title_range)
-
-        ret[title.GetName()] = linked_clips
-    return ret
+print("Initializing Davinci Resolve......")
 
 # 达芬奇初始化
 resolve: "Resolve" = GetResolve()
+print("Got Resolve API.")
 if not resolve:
     messagebox.showinfo("无法连接到Davinci Resolve","请启动Davinci Resolve，并进入一个项目工程，然后才能使用ProTurnover。")
     exit(-1)
@@ -264,7 +241,7 @@ def on_extract_timeline():
         messagebox.showinfo(f"没有检测到{WorkTimeline.TrackType.FXShot_mark}轨道",f"ProTurnover需要从{WorkTimeline.TrackType.FXShot_mark}中读取VFX Title信息。")
         return
 
-    fx_datas = get_fx_data(fx_timeline, title_tracks)
+    fx_datas = fx_timeline.get_fx_data(title_tracks)
 
     all_linked_clips_uuid = []
     for data in fx_datas:
@@ -282,7 +259,7 @@ def on_extract_timeline():
         if not clip.GetClipEnabled(): to_delete.append(clip)
     fx_timeline.timeline.DeleteClips(to_delete)
 
-    fx_datas = get_fx_data(fx_timeline,title_tracks, False)
+    fx_datas = fx_timeline.get_fx_data(title_tracks, False)
     for data in fx_datas:
         index = 1
         for clip in fx_datas[data]:
@@ -332,11 +309,14 @@ def on_export_shotlist():
     tgt_track = target_track_combobox.get()
 
     exp_timeline = WorkTimeline(proj.GetCurrentTimeline())
+
+
     title_tracks: list[int]
     if tgt_track and tgt_track in work_timeline.video_tracks:
         title_tracks = [work_timeline.video_tracks.index(tgt_track) + 1]
     else:
         title_tracks = exp_timeline.get_tracks(WorkTimeline.TrackType.FXShot_mark)
+    fx_datas = exp_timeline.get_fx_data(title_tracks, False)
     if len(title_tracks) == 0:
         messagebox.showinfo("当前时间线没有视效镜头数据", f"选择一个有{WorkTimeline.TrackType.FXShot_mark.value}轨道的时间线，然后ProTurnover才能读取视效镜头数据。")
         return
@@ -355,7 +335,11 @@ def on_export_shotlist():
             "Comments": vt.GetMediaPoolItem().GetClipProperty("Comments"),
             "VFX Shot #": vt.GetMediaPoolItem().GetClipProperty("VFX Shot #"),
             "VFX Markers": vt.GetMediaPoolItem().GetClipProperty("VFX Markers"),
-            "VFX Notes": vt.GetMediaPoolItem().GetClipProperty("VFX Notes")
+            "VFX Notes": vt.GetMediaPoolItem().GetClipProperty("VFX Notes"),
+            "Referred Clip": fx_datas[vt.GetName()][0].GetName(),
+            "Referred Reel": fx_datas[vt.GetName()][0].GetMediaPoolItem().GetClipProperty("Reel Name"),
+            "Referred Shot": fx_datas[vt.GetName()][0].GetMediaPoolItem().GetMetadata("Shot"),
+            "Referred Scene": fx_datas[vt.GetName()][0].GetMediaPoolItem().GetMetadata("Scene"),
         }
 
 
