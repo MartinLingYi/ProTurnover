@@ -335,12 +335,18 @@ def on_export_shotlist():
             "Comments": vt.GetMediaPoolItem().GetClipProperty("Comments"),
             "VFX Shot #": vt.GetMediaPoolItem().GetClipProperty("VFX Shot #"),
             "VFX Markers": vt.GetMediaPoolItem().GetClipProperty("VFX Markers"),
-            "VFX Notes": vt.GetMediaPoolItem().GetClipProperty("VFX Notes"),
-            "Referred Clip": fx_datas[vt.GetName()][0].GetName(),
-            "Referred Reel": fx_datas[vt.GetName()][0].GetMediaPoolItem().GetClipProperty("Reel Name"),
-            "Referred Shot": fx_datas[vt.GetName()][0].GetMediaPoolItem().GetMetadata("Shot"),
-            "Referred Scene": fx_datas[vt.GetName()][0].GetMediaPoolItem().GetMetadata("Scene"),
+            "VFX Notes": vt.GetMediaPoolItem().GetClipProperty("VFX Notes")
+
         }
+        referred_clip = fx_datas[vt.GetName()][0]
+        if not referred_clip:
+            continue
+        else:
+            shotlist[vt.GetName()]["Referred Clip"] = referred_clip.GetName()
+            if not referred_clip.GetMediaPoolItem(): continue
+            shotlist[vt.GetName()]["Referred Reel"] = referred_clip.GetMediaPoolItem().GetClipProperty("Reel Name")
+            shotlist[vt.GetName()]["Referred Shot"] = referred_clip.GetMediaPoolItem().GetMetadata("Shot")
+            shotlist[vt.GetName()]["Referred Scene"] = referred_clip.GetMediaPoolItem().GetMetadata("Scene")
 
 
     tgt_path = filedialog.asksaveasfilename(
