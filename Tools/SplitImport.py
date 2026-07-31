@@ -76,8 +76,10 @@ def split_datas_by_ranges(_split_datas: dict[str, dict[str, str]],discontinuous_
             # 两个区间相交
             # split: [in_frame, end_frame)
             # bad:   [bad_start, bad_end]
-            if bad_start < end_frame and bad_end >= in_frame:
+
+            if not(bad_end < in_frame and bad_start >= end_frame):
                 cuts.append((bad_start, bad_end))
+
 
         if not cuts:
             result[in_str] = data
