@@ -13,6 +13,107 @@ if TYPE_CHECKING:
     from davinci_resolve import *
 # endregion
 
+def get_discontinuous_ranges(csv_path):
+    """
+    返回不连续的FRAME区间
+    例如:
+    [(250, 260), (500, 520)]
+    """
+
+    ranges = []
+
+    start = None
+    last_frame = None
+
+    with open(csv_path, "r", encoding="utf-8-sig") as f:
+        reader = csv.DictReader(f)
+
+        for row in reader:
+            frame = int(row["FRAME"])
+            file_value = row["FILE"].strip()
+
+            # 判断是否连续
+            continuous = (
+                file_value != ""
+                and file_value.isdigit()
+                and int(file_value) == frame
+            )
+
+            if not continuous:
+                if start is None:
+                    start = frame
+
+            else:
+                if start is not None:
+                    ranges.append((start, frame - 1))
+                    start = None
+
+            last_frame = frame
+
+
+        # 文件结尾仍然断裂
+        if start is not None:
+            ranges.append((start, last_frame))
+
+
+    return ranges
+def split_datas_by_ranges(_split_datas: dict[str, dict[str, str]],discontinuous_ranges):
+
+    result = {}
+
+    for in_str, data in _split_datas.items():
+
+        in_frame = int(in_str)
+        dur = int(data["Dur"])
+
+        # split区域右开
+        end_frame = in_frame + dur
+
+        cuts = []
+
+        for bad_start, bad_end in discontinuous_ranges:
+
+            # 两个区间相交
+            # split: [in_frame, end_frame)
+            # bad:   [bad_start, bad_end]
+            if bad_start < end_frame and bad_end >= in_frame:
+                cuts.append((bad_start, bad_end))
+
+        if not cuts:
+            result[in_str] = data
+            continue
+
+        current = in_frame
+
+        for bad_start, bad_end in cuts:
+
+            # 坏帧之前的有效部分
+            if current < bad_start:
+                new_data = data.copy()
+
+                new_data["Dur"] = str(
+                    bad_start - current
+                )
+
+                result[str(current)] = new_data
+
+            # 跳过坏帧
+            # 注意闭区间，所以 +1
+            current = bad_end + 1
+
+        # 最后一段
+        if current < end_frame:
+            new_data = data.copy()
+
+            new_data["Dur"] = str(
+                end_frame - current
+            )
+
+            result[str(current)] = new_data
+
+
+    return result
+
 # region Init_Resolve
 resolve: "Resolve" = GetResolve()
 pm: "ProjectManager" = resolve.GetProjectManager()
@@ -39,6 +140,13 @@ with open(split_csv_path, "r", encoding="utf-8-sig") as f:
             if k == "In": continue
             split_data[k] = item[k]
         split_datas[item["In"]] = split_data
+
+xsheet_path = Path(split_csv_path).parent.joinpath("xsheet.csv")
+if xsheet_path.exists():
+    discontinuous_ranges = get_discontinuous_ranges(xsheet_path)
+    split_datas = split_datas_by_ranges(split_datas, discontinuous_ranges)
+
+
 # endregion
 
 # region LinkMedia
