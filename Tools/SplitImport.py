@@ -1,4 +1,5 @@
 # region Import_block
+import copy
 import csv
 from csv import DictReader
 from pathlib import Path
@@ -57,7 +58,7 @@ def get_discontinuous_ranges(csv_path):
 
 
     return ranges
-def split_datas_by_ranges(_split_datas: dict[str, dict[str, str]],discontinuous_ranges):
+def split_datas_by_ranges(_split_datas, discontinuous_ranges):
 
     result = {}
 
@@ -66,32 +67,53 @@ def split_datas_by_ranges(_split_datas: dict[str, dict[str, str]],discontinuous_
         in_frame = int(in_str)
         dur = int(data["Dur"])
 
-        # split区域右开
+        # split: [in_frame, end_frame)
         end_frame = in_frame + dur
 
         cuts = []
 
         for bad_start, bad_end in discontinuous_ranges:
 
-            # 两个区间相交
-            # split: [in_frame, end_frame)
-            # bad:   [bad_start, bad_end]
-
-            if not(bad_end < in_frame and bad_start >= end_frame):
-                cuts.append((bad_start, bad_end))
-
+            # bad: [bad_start, bad_end]
+            # 判断相交
+            if not (bad_end < in_frame or bad_start >= end_frame):
+                cuts.append(
+                    (
+                        max(bad_start, in_frame),
+                        min(bad_end, end_frame - 1)
+                    )
+                )
 
         if not cuts:
             result[in_str] = data
             continue
 
+
+        # 关键：排序
+        cuts.sort()
+
+
+        # 关键：合并重叠坏帧
+        merged = []
+
+        for start, end in cuts:
+
+            if not merged or start > merged[-1][1] + 1:
+                merged.append([start, end])
+            else:
+                merged[-1][1] = max(
+                    merged[-1][1],
+                    end
+                )
+
+
         current = in_frame
 
-        for bad_start, bad_end in cuts:
+        for bad_start, bad_end in merged:
 
-            # 坏帧之前的有效部分
             if current < bad_start:
-                new_data = data.copy()
+
+                new_data = copy.deepcopy(data)
 
                 new_data["Dur"] = str(
                     bad_start - current
@@ -99,13 +121,15 @@ def split_datas_by_ranges(_split_datas: dict[str, dict[str, str]],discontinuous_
 
                 result[str(current)] = new_data
 
-            # 跳过坏帧
-            # 注意闭区间，所以 +1
+
+            # 跳过闭区间坏帧
             current = bad_end + 1
 
-        # 最后一段
+
+        # 尾部
         if current < end_frame:
-            new_data = data.copy()
+
+            new_data = copy.deepcopy(data)
 
             new_data["Dur"] = str(
                 end_frame - current
