@@ -58,59 +58,79 @@ def get_discontinuous_ranges(csv_path):
 
 
     return ranges
+
+
 def split_datas_by_ranges(_split_datas, discontinuous_ranges):
 
     result = {}
 
     for in_str, data in _split_datas.items():
 
-        in_frame = int(in_str)
+        clip_start = int(in_str)
         dur = int(data["Dur"])
 
-        # split: [in_frame, end_frame)
-        end_frame = in_frame + dur
+        # clip闭区间
+        clip_end = clip_start + dur - 1
+
 
         cuts = []
 
         for bad_start, bad_end in discontinuous_ranges:
 
-            # bad: [bad_start, bad_end]
-            # 判断相交
-            if not (bad_end < in_frame or bad_start >= end_frame):
+            # 两个闭区间相交条件：
+            # clip_start <= bad_end
+            # 且 bad_start <= clip_end
+            if clip_start <= bad_end and bad_start <= clip_end:
+
                 cuts.append(
                     (
-                        max(bad_start, in_frame),
-                        min(bad_end, end_frame - 1)
+                        max(bad_start, clip_start),
+                        min(bad_end, clip_end)
                     )
                 )
+
 
         if not cuts:
             result[in_str] = data
             continue
 
 
-        # 关键：排序
+        # 排序
         cuts.sort()
 
 
-        # 关键：合并重叠坏帧
+        # 合并连续/重叠断点
         merged = []
 
         for start, end in cuts:
 
-            if not merged or start > merged[-1][1] + 1:
+            if not merged:
+
                 merged.append([start, end])
+
             else:
-                merged[-1][1] = max(
-                    merged[-1][1],
-                    end
-                )
+
+                last_start, last_end = merged[-1]
+
+                # 重叠或者相邻
+                if start <= last_end + 1:
+
+                    merged[-1][1] = max(
+                        last_end,
+                        end
+                    )
+
+                else:
+
+                    merged.append([start, end])
 
 
-        current = in_frame
+        current = clip_start
+
 
         for bad_start, bad_end in merged:
 
+            # 坏帧之前
             if current < bad_start:
 
                 new_data = copy.deepcopy(data)
@@ -122,17 +142,18 @@ def split_datas_by_ranges(_split_datas, discontinuous_ranges):
                 result[str(current)] = new_data
 
 
-            # 跳过闭区间坏帧
+            # 跳过坏帧闭区间
             current = bad_end + 1
 
 
-        # 尾部
-        if current < end_frame:
+
+        # 剩余尾部
+        if current <= clip_end:
 
             new_data = copy.deepcopy(data)
 
             new_data["Dur"] = str(
-                end_frame - current
+                clip_end - current + 1
             )
 
             result[str(current)] = new_data
