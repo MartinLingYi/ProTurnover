@@ -5,6 +5,7 @@ from csv import DictReader
 from pathlib import Path
 
 from Utils.python_get_resolve import GetResolve
+from Utils.PTLib import EDL
 from typing import TYPE_CHECKING
 from tkinter import messagebox
 from tkinter import filedialog
@@ -222,4 +223,53 @@ for clip_in in split_datas:
 
 
 
+# endregion
+
+# region ExportEDL
+# 将 split_datas 按帧闭区间 [In, In+Dur-1] 排序，并检测区间连续性。
+# 任意一个 Clip 的 Start 减去上一个 Clip 的 End 大于 1 即视为不连续，
+# 需要拆分为多个 EDL 文件导出。
+EDL_FPS = 24
+
+_edl_clips: list[tuple[int, int, str]] = []
+for _in_str, _data in split_datas.items():
+    _in = int(_in_str)
+    _dur = int(_data["Dur"])
+    _edl_clips.append((_in, _in + _dur - 1, _in_str))
+_edl_clips.sort(key=lambda c: c[0])
+
+_edl_segments: list[list[tuple[int, int, str]]] = []
+_current: list[tuple[int, int, str]] = []
+_prev_end = None
+for _start, _end, _key in _edl_clips:
+    if _prev_end is not None and _start - _prev_end > 1:
+        _edl_segments.append(_current)
+        _current = []
+    _current.append((_start, _end, _key))
+    _prev_end = _end if _prev_end is None else max(_prev_end, _end)
+if _current:
+    _edl_segments.append(_current)
+
+_edl_dir = Path(split_csv_path).parent
+_edl_title = Path(split_csv_path).stem
+
+for _seg in _edl_segments:
+    # 帧计数（非时间码）：取该段首帧与最大尾帧
+    _seg_start = _seg[0][0]
+    _seg_end = max(_e for _s, _e, _k in _seg)
+    _edl_path = _edl_dir.joinpath(f"splitedl_{_seg_start:04d}-{_seg_end:04d}.edl")
+
+    _edl = EDL(_title=_edl_title, _fps=EDL_FPS)
+    for _s, _e, _key in _seg:
+        _data = split_datas[_key]
+        _edl.append_item({
+            EDL.EDLDataType.reel_name: str(_data.get("Scene", "") or "AX"),
+            EDL.EDLDataType.edl_clip_name: str(_data.get("Shot", "") or _key),
+            EDL.EDLDataType.start: _s,
+            EDL.EDLDataType.end: _e,
+            EDL.EDLDataType.record_start: _s,
+            EDL.EDLDataType.record_end: _e,
+        })
+    _edl.save_to(str(_edl_path))
+    print(f"EDL 已导出: {_edl_path}")
 # endregion
