@@ -1,21 +1,32 @@
 import inspect
 import pathlib
 from enum import Enum
+from time import sleep
 from typing import TYPE_CHECKING, Any
 import re
 from collections import defaultdict
-from bisect import bisect_left
+from bisect import bisect_left, bisect_right
 
 
 if TYPE_CHECKING:
     from davinci_resolve import *
 
+#region Static Methods
+
 def get_script_dir() -> pathlib.Path:
+    """取得脚本所在目录，用于定位 PTAsset 等随脚本分发的资源。
+
+    常规运行时返回项目根目录，没有 __file__ 的环境下回退到调用栈所在目录。
+    """
     if "__file__" in globals():
         return pathlib.Path(__file__).parent.absolute().parent
     return pathlib.Path(inspect.getfile(inspect.currentframe())).parent
 
 def find_neighbors(n: int, _keys: list) -> tuple[int, int]:
+    """在升序列表中找出与 n 相邻的左右两个元素。
+
+    n 与某元素相同时返回 (n, n)，某一侧不存在时为 None。
+    """
     idx = bisect_left(_keys, n)
     left = None
     right = None
@@ -34,6 +45,10 @@ def find_neighbors(n: int, _keys: list) -> tuple[int, int]:
     return left, right
 
 def check_shot_name_rule(_rule: str) -> str:
+    """检查视效镜头命名规则是否可用。
+
+    规则须包含 [ShotIndex] 且其后没有其他字段，返回 "Pass"/"NotTail"/"NoContain"。
+    """
     match = re.search(r"\[ShotIndex]", _rule)
     if match:
         remaining = _rule[match.end():]
@@ -44,6 +59,10 @@ def check_shot_name_rule(_rule: str) -> str:
     return "NoContain"
 
 def format_input(_string: str, _data: dict[str, Any]) -> str:
+    """按 _data 填充字符串中的 [字段] 占位符。
+
+    _data 中没有的字段保留原样，便于发现缺失数据。
+    """
     def repl(match):
         key = match.group(1)  # 取 [] 内部内容
         if key in _data.keys(): return f"{_data[key]}"
@@ -52,6 +71,10 @@ def format_input(_string: str, _data: dict[str, Any]) -> str:
     return ret
 
 def get_shot_index(_rule: str, _shot_name: str) ->  int | None:
+    """从视效镜头名中取出镜头编号。
+
+    依据 [ShotIndex] 在命名规则中的位置，截取镜头名中的对应内容并转为整数。
+    """
     shot_index_end = 0
     for match in re.finditer(r"\[ShotIndex]", _rule):
         shot_index_end = match.end()
@@ -68,6 +91,10 @@ def get_shot_index(_rule: str, _shot_name: str) ->  int | None:
 
 
 def merge_intervals(items) -> list[dict[str, Any]]:
+    """按名称分组，合并重叠或首尾相接的帧区间。
+
+    传入与返回的都是含 "name"、"in"、"out" 的字典列表，同一名称的区间互不相交。
+    """
     # 1. 按 name 分组
     groups = defaultdict(list)
     for it in items:
@@ -107,6 +134,10 @@ def merge_intervals(items) -> list[dict[str, Any]]:
     return result
 
 def clipinfo_of(_media_pool_item: "MediaPoolItem", _start_frame: int = 0, _end_frame: int = -1,  _media_type: int = 1, _track_index: int = 1, _record_frame: int = -1) -> dict[str, Any]:
+    """构造 MediaPool.AppendToTimeline 所需的片段信息字典。
+
+    -1 表示该参数不指定：仅给 _record_frame 时按记录位置插入，仅给源出入点时按源时间插入。
+    """
     if _end_frame == -1 and _record_frame != -1: return {"mediaPoolItem": _media_pool_item, "startFrame": _start_frame, "trackIndex": _track_index, "recordFrame": _record_frame}
     if _end_frame == -1: return {"mediaPoolItem": _media_pool_item, "startFrame": _start_frame}
     if _record_frame == -1: return {"mediaPoolItem": _media_pool_item, "startFrame": _start_frame, "endFrame": _end_frame, "mediaType": _media_type}
@@ -115,6 +146,10 @@ def clipinfo_of(_media_pool_item: "MediaPoolItem", _start_frame: int = 0, _end_f
 
 
 def to_time_code(frames: int, fps = 24, hour_offset = 0) -> str:
+    """把帧数换算为 HH:MM:SS:FF 时间码。
+
+    hour_offset 用于补偿项目起始时间码，fps 默认 24。
+    """
     fr = frames % fps
     sec = frames // fps
     minute = sec // 60
@@ -125,6 +160,10 @@ def to_time_code(frames: int, fps = 24, hour_offset = 0) -> str:
     return "%02d:%02d:%02d:%02d" % (hour, minute, sec, fr)
 
 def to_frame_count(TC: str, fps = 24) -> int:
+    """把 HH:MM:SS:FF 时间码换算为帧数。
+
+    不是四段式时间码时返回 0，fps 默认 24。
+    """
     frm = 0
     tcs = TC.split(":")
     # TC = 01:22:42:10
@@ -134,19 +173,54 @@ def to_frame_count(TC: str, fps = 24) -> int:
     return frm
 
 def overlap(a: range, b: range) -> bool:
+    """判断两个帧范围是否相交。
+
+    区间按左闭右开处理。
+    """
     return max(a.start, b.start) < min(a.stop, b.stop)
 
 def get_clips_in_range(clip_list: list["TimelineItem"], r: range) -> list["TimelineItem"]:
+    """筛选出与给定帧范围有交集的片段。
+
+    返回顺序与传入列表一致。
+    """
     ret: list["TimelineItem"] = []
     for clip in clip_list:
-        clip_range = range(clip.GetStart(), clip.GetEnd(), 1)
+        clip_range = range(clip.GetStart().__round__(), clip.GetEnd().__round__(), 1)
         if overlap(clip_range, r): ret.append(clip)
     return ret
 
-
+#endregion
 
 class WorkTimeline:
+    """达芬奇时间线（Timeline）的封装。
+
+    按 ProTurnover 的轨道命名约定（TrackType）提供轨道查找、片段扫描与轨道创建功能。
+
+    方法:
+        __init__: 记录被封装的时间线。
+        video_track_count: 视频轨道数量。
+        audio_track_count: 音频轨道数量。
+        video_tracks: 视频轨道名称列表，形如 "V1/Drama"。
+        audio_tracks: 音频轨道名称列表。
+        get_track_index: 按名称查找视频轨道序号。
+        save_current_track_enable_states: 记录各视频轨道的启用状态。
+        recover_track_enable_states: 恢复各视频轨道的启用状态。
+        get_audio_clips: 取得所有音频片段。
+        get_track_clips_in_range: 取得指定轨道上落入帧范围的片段。
+        get_track_clips: 取得指定轨道上的全部片段。
+        get_all_clips: 取得整条时间线的片段，可按视频或音频过滤。
+        get_tracks_via_name: 按轨道名前缀查找轨道序号。
+        get_tracks: 按 TrackType 查找轨道序号。
+        get_fx_data: 收集与各视效标注片段相关的剪辑、音频、叠加与参考片段。
+        create_track: 按 TrackType 新建视频轨道并返回轨道序号。
+    """
     class TrackType(Enum):
+        """ProTurnover 的轨道命名约定，枚举值即轨道名。
+
+        枚举值与轨道名不同的成员：FXSubclip 为 VFXPlates、FXShot_mark 为 VFXTitles、
+        FXShot_premark 为 VFXPreTitles、FXReturn 为 VFXShots。
+        """
         Drama = "Drama"
         Overlay = "Overlay"
         ResolveFX = "ResolveFX"
@@ -298,12 +372,29 @@ class WorkTimeline:
         return ret
 
 
-
-
-
-
 class WorkMediaPool:
+    """媒体池（MediaPool）的封装。
+
+    负责 ProTurnover 约定文件夹的创建与查找，以及帧计数素材等外部资源的登记。
+
+    类属性:
+        pt_source: 别名到 MediaPoolItem 的登记表，由所有实例共享。
+
+    方法:
+        __init__: 记录媒体池对象并取得根文件夹。
+        get_folder: 按 WorkFolderType 查找根目录下的文件夹。
+        create_folder: 取得约定的文件夹，不存在时创建。
+        subfolder_of: 按名称查找子文件夹。
+        get_all_clip: 递归收集文件夹内的片段。
+        register_source: 登记磁盘文件，已登记过则直接返回。
+        get_source: 按别名取出已登记的 MediaPoolItem。
+    """
     class WorkFolderType(Enum):
+        """ProTurnover 的媒体池文件夹命名约定，枚举值即文件夹名。
+
+        枚举值与文件夹名不同的成员：VFXTitle 为 VFXTitles、Deliverable 为 Returns、
+        WorkFolder 为 .ProTurnover。
+        """
         Source = "Source"
         Asset = "Asset"
         Reference = "Reference"
@@ -342,7 +433,7 @@ class WorkMediaPool:
         else:
             ret: list["MediaPoolItem"] = _target.GetClipList()
             for sf in _target.GetSubFolderList():
-                if sf.GetName() == self.work_folder_names[2] or sf.GetName() == self.work_folder_names[3] or sf.GetName() == self.work_folder_names[4]:
+                if sf.GetName() == self.WorkFolderType.Reference or sf.GetName() == self.WorkFolderType.WorkFolder or sf.GetName() == self.WorkFolderType.Sequence:
                     continue
                 ret += self.get_all_clip(sf)
             return ret
@@ -373,7 +464,23 @@ class WorkMediaPool:
 
 
 class EDL:
+    """EDL 文件的读写容器。
+
+    以条目为单位维护 EDL 数据，支持文本解析、生成 EDL 文本、写入文件与逐条追加条目。
+
+    方法:
+        __init__: 设定标题、帧率与 FCM。
+        parse_str: 从 EDL 文本行解析标题与各条目。
+        get_str: 输出 EDL 文本行。
+        load_from: 预留的读取接口，尚未实现。
+        save_to: 将 EDL 写入指定文件。
+        append_item: 追加条目，自动编号并按帧数换算时间码。
+    """
     class EDLDataType(Enum):
+        """EDL 条目的字段名。
+
+        含序号、卷名、通道、剪辑方式、源入出点、记录入出点与源片段名（FROM CLIP NAME）。
+        """
         index = "Index"
         reel_name = "ReelName"
         v = "V"
@@ -508,3 +615,163 @@ class EDL:
             self.EDLDataType.record_end: to_time_code(ire, self.fps),
             self.EDLDataType.edl_clip_name: item[self.EDLDataType.edl_clip_name],
         })
+
+
+class Marker:
+    at_clip_frame: int
+    payload: MarkerInfo
+    def __init__(self, at_clip_frame: int, payload: MarkerInfo):
+        self.at_clip_frame = at_clip_frame
+        self.payload = payload
+
+    def content_equal_to(self, marker: Marker) -> bool:
+        t_pl = marker.payload
+        s_pl = self.payload
+        return (s_pl["color"] == t_pl["color"]) and (s_pl["name"] == t_pl["name"]) and (s_pl["note"] == t_pl["note"]) and (s_pl["duration"] == t_pl["duration"])
+
+class ClipMarkerSyncer:
+    clip: TimelineItem
+    def __init__(self, clip: TimelineItem):
+        self.clip: TimelineItem = clip
+
+    def get(self) -> dict[int, Marker]:
+        ret: dict[int, Marker] = {}
+        clip_in = round(self.clip.GetStart())
+        clip_s_in: int = self.clip.GetSourceStartFrame()
+        markers = self.clip.GetMarkers()
+        for m in markers:
+            fi = clip_in + m - clip_s_in
+            ret[fi] = Marker(m, markers[m])
+
+        return ret
+
+    def set(self, markers: dict[int, Marker]):
+        original_dict = self.get()
+        original_markers = {m.at_clip_frame: m for m in original_dict.values()}
+        now_markers = {m.at_clip_frame: m for m in markers.values()}
+        diff = original_markers.keys() ^ now_markers.keys()
+        same = original_markers.keys() & now_markers.keys()
+
+        for fi in diff:
+            if fi not in now_markers: self.clip.DeleteMarkerAtFrame(fi)
+            if fi not in original_markers:
+                new_marker = now_markers[fi].payload
+                self.clip.AddMarker(fi, new_marker["color"],new_marker["name"], new_marker["note"], new_marker["duration"])
+
+        for fi in same:
+            if not original_markers[fi].content_equal_to(now_markers[fi]):
+                new_marker = now_markers[fi].payload
+                self.clip.DeleteMarkerAtFrame(fi)
+                self.clip.AddMarker(fi, new_marker["color"], new_marker["name"], new_marker["note"],
+                                    new_marker["duration"])
+
+
+class MarkerSequence:
+    # m_seq: {v_track_index: {in_frame: Marker} }
+    m_seq: dict[int, dict[int, Marker]] = {}
+    wt: WorkTimeline
+    def __init__(self, _timeline: WorkTimeline):
+        self.wt = _timeline
+
+    def load(self):
+        for p in range(1, self.wt.video_track_count + 1):
+            current: dict[int, Marker] = {}
+            clips = self.wt.get_track_clips([p],"video")
+            for clip in clips:
+                current |= ClipMarkerSyncer(clip).get()
+
+            self.m_seq[p] = current
+
+    def to_tsv(self, fps) -> list[str]:
+        tsv: list[str] = ["RecordStart\tDuration\tVTrack\tName\tNote\tColor"]
+        for v_track in self.m_seq:
+            for (fi, marker) in self.m_seq[v_track].items():
+                pl: MarkerInfo = marker.payload
+                _dur = pl["duration"]
+                _name = pl["name"]
+                _note = pl["note"]
+                _color = pl["color"]
+                tsv.append(f"{to_time_code(fi,fps)}\t{_dur}\t{v_track}\t{_name}\t{_note}\t{_color}")
+
+        return tsv
+
+    def get_clip_of(self, tfi:int, v:int) -> TimelineItem|None:
+        clips = self.wt.get_track_clips([v], "video")
+        clip_ins = [c.GetStart().__round__() for c in clips]
+        p = max(bisect_right(clip_ins, tfi) - 1, 0)
+        print(clip_ins, p, clip_ins[p])
+        if len(clips) > p >= 0 and tfi <= clips[p].GetEnd().__round__(): return clips[p]
+        else: return None
+
+    def get_source_frame_in(self, tfi: int, v: int) -> int:
+        clip = self.get_clip_of(tfi, v)
+        if clip is None: return -1
+        clip_start = clip.GetStart().__round__()
+        clip_source_start = clip.GetSourceStartFrame()
+        sfi = tfi - clip_start + clip_source_start
+        return sfi
+
+
+
+    def parse_from(self, tsv: list[str], fps: int):
+        if not tsv:
+            print("Empty TSV.")
+            return
+
+        parsed: list[dict[str, Any]] = []
+        header = tsv[0].split("\t")
+        for v in tsv[1:]:
+            values = v.split("\t")
+            parsed_dict: dict[str, Any] = {}
+            for index in range(len(values)):
+                value = values[index]
+                parsed_dict[header[index]] = value
+
+            parsed.append(parsed_dict)
+
+
+        self.m_seq = {}
+        for marker_info in parsed:
+            fi = 0
+            v_track: int = 0
+            resolve_marker_info: MarkerInfo = {}
+            for (k,v) in marker_info.items():
+                match k:
+                    case "RecordStart":
+                        fi = to_frame_count(v,fps)
+                    case "Duration":
+                        resolve_marker_info["duration"] = int(v)
+                    case "VTrack":
+                        v_track = int(v)
+                    case "Name":
+                        resolve_marker_info["name"] = v
+                    case "Note":
+                        resolve_marker_info["note"] = v
+                    case "Color":
+                        resolve_marker_info["color"] = v
+
+            if v_track == 0 or fi == 0: continue
+            sfi = self.get_source_frame_in(fi,v_track)
+            if v_track not in self.m_seq: self.m_seq[v_track] = {}
+            self.m_seq[v_track][fi] = Marker(sfi, resolve_marker_info)
+
+    def write(self):
+        for v_track in self.m_seq:
+            fis = list(self.m_seq[v_track].keys())
+            markers = list(self.m_seq[v_track].values())
+            print(fis)
+            i = 0
+            while i < len(fis):
+                current_clip_markers: dict[int, Marker] = {}
+                fi = fis[i]
+                clip = self.get_clip_of(fi,v_track)
+                clip_range = range(clip.GetStart().__round__(), clip.GetEnd().__round__())
+                for j in range(i, len(fis)):
+                    fi = fis[j]
+                    marker = markers[j]
+                    if fi in clip_range:
+                        current_clip_markers[fi] = marker
+                        i = j
+
+                ClipMarkerSyncer(clip).set(current_clip_markers)
+                i+=1

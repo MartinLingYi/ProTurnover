@@ -1,11 +1,9 @@
 import math
 import sys
 import tkinter as tk
-from pathlib import Path
 from tkinter import ttk
 from tkinter import messagebox
 from tkinter import filedialog
-from typing import Any
 import datetime
 
 import Utils.PTLib
@@ -13,7 +11,7 @@ from Utils.python_get_resolve import GetResolve
 from Utils.PTLib import *
 
 if TYPE_CHECKING:
-    from davinci_resolve import *
+    from davinci_resolve import DaVinciResolveScript
 
 
 
@@ -33,7 +31,7 @@ if not proj:
     exit(-1)
 
 media_pool: "MediaPool" = proj.GetMediaPool()
-fps = proj.GetSetting("timelineFrameRate")
+fps = proj.GetSettings()["timelineFrameRate"]
 current_timeline = proj.GetCurrentTimeline()
 if not current_timeline:
     messagebox.showinfo("无法加载时间线",
@@ -85,7 +83,17 @@ def on_pre_mark():
 
     for r in premark_range:
         cut_in = 1001 + handle_var.get()
-        pmi = work_mp.media_pool.AppendToTimeline([Utils.PTLib.clipinfo_of(work_mp.get_source("FrameCounter_24P"), cut_in, cut_in + r["out"] - r["in"], 1,tgt_track, r["in"])])
+        frame_counter_mpi = work_mp.get_source("FrameCounter_24P")
+        if frame_counter_mpi is None: return
+        clip_info: AppendClipInfo = {
+            "mediaPoolItem": frame_counter_mpi,
+            "startFrame": cut_in,
+            "endFrame": cut_in + r["out"] - r["in"],
+            "mediaType": 1,
+            "trackIndex": tgt_track,
+            "recordFrame": r["in"]
+        }
+        pmi = work_mp.media_pool.AppendToTimeline([clip_info])
         if len(pmi) != 0:
             pmi[0].SetName("PM_FXType=")
 
@@ -115,7 +123,6 @@ def on_mark_shot():
         vfx_title_tracks.append(work_timeline.video_tracks.index(tgt)+1)
 
     vfx_title_idict: dict[int, int] = {}
-    vfx_title_ikeys: list[int] = []
     if len(vfx_title_tracks) != 0:
         # 扫描已有VFXTitles，并尝试读取ShotIndex
         vfx_titles = work_timeline.get_track_clips(vfx_title_tracks)
@@ -127,7 +134,7 @@ def on_mark_shot():
                 messagebox.showerror("无法识别此片段",
                                      f"{vt.GetName()}不是与命名规则一致的视效镜头标记。请重命名此片段后重试。")
                 return
-            vfx_title_idict[vt.GetStart()] = shot_index
+            vfx_title_idict[round(vt.GetStart())] = shot_index
 
     vfx_premarks = work_timeline.get_track_clips(vfx_premark_tracks)
     # Premark的镜头也做分析
@@ -136,7 +143,7 @@ def on_mark_shot():
         if premark.GetName()[0:2] == "PM": continue
         shot_index = Utils.PTLib.get_shot_index(name_rule, premark.GetName())
         if not shot_index: continue
-        vfx_title_idict[premark.GetStart()] = shot_index
+        vfx_title_idict[round(premark.GetStart())] = shot_index
     vfx_title_ikeys = sorted(vfx_title_idict.keys())
 
     last_shot_index = 0
@@ -165,7 +172,7 @@ def on_mark_shot():
 
         # 否则开始推理镜头号
         shot_index: int
-        lc, nc = Utils.PTLib.find_neighbors(premark.GetStart(), vfx_title_ikeys)
+        lc, nc = Utils.PTLib.find_neighbors(premark.GetStart().__round__(), vfx_title_ikeys)
 
         if not nc and not lc and last_shot_index == 0:
             shot_index = 10 # 没有前序标注，是第一个片段
@@ -175,14 +182,16 @@ def on_mark_shot():
             shot_index = max(vfx_title_idict[lc], last_shot_index) + 10  # 在尾端，直接+10
         else:
         # 否则视为插入镜头
-            if nc == lc : shot_index = vfx_title_idict[nc] + 1
-            if last_shot_index < vfx_title_idict[lc]: last_shot_index = vfx_title_idict[lc]
+            if nc == lc :
+                shot_index = vfx_title_idict[nc] + 1
+            else:
+                if last_shot_index < vfx_title_idict[lc]: last_shot_index = vfx_title_idict[lc]
 
-            if nc - last_shot_index <= 1:
-                messagebox.showinfo("没有足够的镜头编号",f"在镜头号{vfx_title_idict[lc]:04d}与{last_shot_index:04d}之间无法插入新的镜头编号。")
-                return
-            d_index = max(math.floor((vfx_title_idict[nc] - last_shot_index) / 2), 1)
-            shot_index = last_shot_index + d_index
+                if nc - last_shot_index <= 1:
+                    messagebox.showinfo("没有足够的镜头编号",f"在镜头号{vfx_title_idict[lc]:04d}与{last_shot_index:04d}之间无法插入新的镜头编号。")
+                    return
+                d_index = max(math.floor((vfx_title_idict[nc] - last_shot_index) / 2), 1)
+                shot_index = last_shot_index + d_index
 
         pm_data["ShotIndex"] = f"{shot_index:04d}"
         shot_name = Utils.PTLib.format_input(name_rule, pm_data)
@@ -209,8 +218,8 @@ def on_generate_subclip():
                                     EDL.EDLDataType.c: "C",
                                     EDL.EDLDataType.start: Utils.PTLib.to_time_code(pt_ss, fps),
                                     EDL.EDLDataType.end: Utils.PTLib.to_time_code(pt_se, fps),
-                                    EDL.EDLDataType.record_start: Utils.PTLib.to_time_code(pt.GetStart(), fps),
-                                    EDL.EDLDataType.record_end: Utils.PTLib.to_time_code(pt.GetEnd(), fps),
+                                    EDL.EDLDataType.record_start: Utils.PTLib.to_time_code(pt.GetStart().__round__(), fps),
+                                    EDL.EDLDataType.record_end: Utils.PTLib.to_time_code(pt.GetEnd().__round__(), fps),
                                     EDL.EDLDataType.edl_clip_name: f"{pt.GetName()}",
                                     })
         index += 1
@@ -226,7 +235,7 @@ def on_extract_timeline():
     fx_timeline = WorkTimeline(work_timeline.timeline.DuplicateTimeline(f"FXTurnover_{datetime.datetime.now().strftime('%m%d%H%M')}"))
     tgt_folder = work_mp.media_pool.AddSubFolder(work_mp.get_folder(WorkMediaPool.WorkFolderType.Turnover), f"{datetime.datetime.now().strftime('%m%d%H%M')}_ToFX")
     work_mp.media_pool.MoveClips([fx_timeline.timeline.GetMediaPoolItem()], tgt_folder)
-    proj.SetCurrentTimeline(fx_timeline)
+    proj.SetCurrentTimeline(fx_timeline.timeline)
 
     if not messagebox.askyesno("现在扫描片段？","选择继续将立刻扫描并禁用不必要的片段。"): return
 
@@ -300,7 +309,7 @@ def on_pack_selected_clips():
 
     mp_root = work_mp.media_pool.GetCurrentFolder()
     for mp in mpi:
-        mp.SetMetadata("VFX Shot #", mp.GetName())
+        mp.SetMetadata({"VFX Shot #": mp.GetName()})
         tgt = work_mp.media_pool.AddSubFolder(mp_root, f"{mp.GetName()}")
         work_mp.media_pool.MoveClips([mp], tgt)
 
@@ -395,13 +404,12 @@ def on_resync_clip_properties():
 
     from_clips: list["TimelineItem"] = work_timeline.get_track_clips(work_timeline.get_tracks(work_timeline.TrackType.Drama))
     for clip in tgt_clips:
-        r = range(clip.GetStart(), clip.GetEnd(), 1)
+        r = range(clip.GetStart().__round__(), clip.GetEnd().__round__(), 1)
         src_clips = Utils.PTLib.get_clips_in_range(from_clips, r)
         if len(src_clips) == 0: continue
         src_clip = src_clips[0]
-        src_properties: dict[str, Any] = src_clip.GetProperty()
-        for (k, v) in src_properties.items():
-            clip.SetProperty(k, v)
+        src_properties = src_clip.GetProperties()
+        clip.SetProperties(src_properties)
     target_track_combobox.set("")
 
 

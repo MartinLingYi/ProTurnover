@@ -1,4 +1,17 @@
-# 关于ProTurnover
+# 关于ProScripts
+原`ProTurnover`现在隆重升级为`ProScripts`。`ProScripts`预计带来包括`ProMarkers`、`ProGoto`、`ProTimelineIO`等全新脚本，分别对应片段标记管理、时间线跳转和更完善的 EDL IO 功能。
+
+## 写在开头
+达芬奇在 21.1 版本中添加了内置 MCP 服务器，同时在 script 目录中添加了完整的 pyi 和开发文档。从此，Agent 也将具有完善的达芬奇脚本开发能力。更进一步的， Agent 也极有可能代替一名剪辑助理。
+
+~~这简直令人瘫坐眩晕~~。不过我想在这里说，如果剪助的一部分工作是机械、重复的劳动，那么它更应该被脚本完成，而不是一边烧 token 一边还有犯错可能的 Agent。本套脚本在编写时依然尽量使用古法手搓编程。仅在代码文档/注释、parse、设计复杂算法方面让 AI 介入。这是为了可维护性，为了真正知道这个脚本在干什么。我个人的观点就是这样：在一个没有 Git 管理的剪辑软件中，只有我清晰地知道这个脚本会做什么，我才能放心地将它用于生产环境。
+
+## ProMarker
+现在你可以像 Avid 一样，以轨道为依据，轻松从时间线上获取并修改片段标记。
+
+仍在测试阶段。发现 bug 请提交 issue。
+
+## ProTurnover
 
 ProTurnover是基于Davinci Resolve API开发的一套Python脚本。它可以快速完成视效镜头标注、在离线工作流程下抽取VFX ID与VFX Plate EDL等常见视效交接工作。
 
@@ -46,7 +59,7 @@ ProTurnover预设了一些轨道和媒体池文件夹的命名规则。其含义
 
 ---
 
-要反馈Bug，请提交Issue。你可以自行Fork此项目，并基于此开发你所需要的特定功能。其中package```davinci_resolve```已经整理出了多数API中提供的方法。```PTLib.py```也对常用功能做了封装。
+要反馈Bug，请提交Issue。你可以自行Fork此项目，并基于此开发你所需要的特定功能。~~其中package```davinci_resolve```已经整理出了多数API中提供的方法。```PTLib.py```也对常用功能做了封装。~~（已经没必要了，请参考达芬奇官方的 API 文档。）
 
 **碍于个人精力，ProTurnover不保证及时修复Issue中的Bug。在使用ProTurnover的代码时，你应当遵守项目中标注的GPL协议。**
 

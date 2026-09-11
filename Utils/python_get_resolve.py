@@ -23,7 +23,12 @@ def load_source(module_name, file_path):
         return imp.load_source(module_name, file_path)
 
 
-def GetResolve():
+def GetBMD():
+    """取得 DaVinciResolveScript 模块（即 fusionscript）。
+
+    优先从 $PYTHONPATH 导入，失败时回退到 Resolve 的默认安装位置，
+    这样在 Resolve 之外（例如 IDE）调试脚本时也能取得该模块。
+    """
     try:
         # The PYTHONPATH needs to be set correctly for this import statement to work.
         # An alternative is to import the DaVinciResolveScript by specifying absolute path (see ExceptionHandler logic)
@@ -49,4 +54,9 @@ def GetResolve():
             print(ex)
             sys.exit()
 
+    return bmd
+
+
+def GetResolve():
+    bmd = GetBMD()
     return bmd.scriptapp("Resolve")
