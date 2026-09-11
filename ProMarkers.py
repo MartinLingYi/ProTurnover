@@ -32,39 +32,6 @@ if not current_timeline:
     exit(-1)
 #endregion
 
-#region Initialize UI
-
-'''
-------------------------------------------
-| ProMarker                              |
-|----------------------------------------|
-||                                      ||
-||                                      ||
-||           (TextBox)                  ||
-||                                      ||
-||                                      ||
-||                                      ||
-------------------------------------------
-| [Refresh]                    [Apply]   |
-------------------------------------------
-
-'''
-
-# 标记序列数据源：从当前时间线的所有视频轨道读取标记
-work_timeline = WorkTimeline(current_timeline)
-ms = MarkerSequence(work_timeline)
-ms.load()
-
-# 达芬奇内置 UI API：UIManager 描述窗口与控件，UIDispatcher 负责事件循环
-bmd = GetBMD()
-ui = resolve.Fusion().UIManager
-dispatcher = bmd.UIDispatcher(ui)
-
-text_box_id = "ProMarker.TextBox"
-copy_buffer_id = "ProMarker.CopyBuffer"
-
-m_seq_tsv: list[str] = []
-
 def refresh_text_box():
     """按当前时间线标记刷新文本框内容。"""
     global m_seq_tsv
@@ -105,6 +72,41 @@ def on_close(ev):
     """
     dispatcher.ExitLoop()
     window.Hide()
+
+#region Initialize UI
+
+'''
+------------------------------------------
+| ProMarker                              |
+|----------------------------------------|
+||                                      ||
+||                                      ||
+||           (TextBox)                  ||
+||                                      ||
+||                                      ||
+||                                      ||
+------------------------------------------
+| [Refresh]                    [Apply]   |
+------------------------------------------
+
+'''
+
+# 标记序列数据源：从当前时间线的所有视频轨道读取标记
+work_timeline = WorkTimeline(current_timeline)
+ms = MarkerSequence(work_timeline)
+ms.load()
+
+# 达芬奇内置 UI API：UIManager 描述窗口与控件，UIDispatcher 负责事件循环
+bmd = GetBMD()
+ui = resolve.Fusion().UIManager
+dispatcher = bmd.UIDispatcher(ui)
+
+text_box_id = "ProMarker.TextBox"
+copy_buffer_id = "ProMarker.CopyBuffer"
+
+m_seq_tsv: list[str] = []
+
+
 
 # 上方为多行文本框，下方左 [Refresh] [Copy]，右 [Apply]
 window_layout = ui.VGroup({"Spacing": 8}, [
