@@ -36,7 +36,7 @@ if not current_timeline:
 
 '''
 ------------------------------------------
-| MarkerSeq                              |
+| ProMarker                              |
 |----------------------------------------|
 ||                                      ||
 ||                                      ||
@@ -60,8 +60,8 @@ bmd = GetBMD()
 ui = resolve.Fusion().UIManager
 dispatcher = bmd.UIDispatcher(ui)
 
-text_box_id = "MarkerSeq.TextBox"
-copy_buffer_id = "MarkerSeq.CopyBuffer"
+text_box_id = "ProMarker.TextBox"
+copy_buffer_id = "ProMarker.CopyBuffer"
 
 m_seq_tsv: list[str] = []
 
@@ -120,8 +120,8 @@ window_layout = ui.VGroup({"Spacing": 8}, [
 ])
 
 window = dispatcher.AddWindow({
-    "ID": "MarkerSeq",
-    "WindowTitle": "MarkerSeq",
+    "ID": "ProMarker",
+    "WindowTitle": "ProMarker",
     "Geometry": [200, 200, 720, 520],
 }, [window_layout])
 
@@ -129,7 +129,7 @@ window = dispatcher.AddWindow({
 window.On.Refresh.Clicked = on_refresh
 window.On.Apply.Clicked = on_apply
 window.On.Copy.Clicked = on_copy
-window.On.MarkerSeq.Close = on_close
+window.On.ProMarker.Close = on_close
 
 text_box = window.Find(text_box_id)
 copy_buffer = window.Find(copy_buffer_id)

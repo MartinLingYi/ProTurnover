@@ -699,7 +699,6 @@ class MarkerSequence:
         clips = self.wt.get_track_clips([v], "video")
         clip_ins = [c.GetStart().__round__() for c in clips]
         p = max(bisect_right(clip_ins, tfi) - 1, 0)
-        print(clip_ins, p, clip_ins[p])
         if len(clips) > p >= 0 and tfi <= clips[p].GetEnd().__round__(): return clips[p]
         else: return None
 
@@ -759,7 +758,6 @@ class MarkerSequence:
         for v_track in self.m_seq:
             fis = list(self.m_seq[v_track].keys())
             markers = list(self.m_seq[v_track].values())
-            print(fis)
             i = 0
             while i < len(fis):
                 current_clip_markers: dict[int, Marker] = {}
