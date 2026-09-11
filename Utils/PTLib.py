@@ -1,7 +1,6 @@
 import inspect
 import pathlib
 from enum import Enum
-from time import sleep
 from typing import TYPE_CHECKING, Any
 import re
 from collections import defaultdict
@@ -12,6 +11,15 @@ if TYPE_CHECKING:
     from davinci_resolve import *
 
 #region Static Methods
+
+def require_start_offset(clip: TimelineItem) -> bool:
+    """
+    What the f--k?
+    非常奇怪的特性。对于StartTC不为0的mediaPoolItem，如果其timelineItem的Start也不为0，就需要给其Start补1帧的偏置。
+    """
+    clip_start = clip.GetSourceStartFrame()
+    clip_s_tc = clip.GetMediaPoolItem().GetClipProperty("Start TC")
+    return (clip_s_tc != "00:00:00:00") and (clip_start != 0)
 
 def get_script_dir() -> pathlib.Path:
     """取得脚本所在目录，用于定位 PTAsset 等随脚本分发的资源。
@@ -638,6 +646,7 @@ class ClipMarkerSyncer:
         ret: dict[int, Marker] = {}
         clip_in = round(self.clip.GetStart())
         clip_s_in: int = self.clip.GetSourceStartFrame()
+        if require_start_offset(self.clip): clip_s_in += 1
         markers = self.clip.GetMarkers()
         for m in markers:
             fi = clip_in + m - clip_s_in
@@ -700,13 +709,17 @@ class MarkerSequence:
         clip_ins = [c.GetStart().__round__() for c in clips]
         p = max(bisect_right(clip_ins, tfi) - 1, 0)
         if len(clips) > p >= 0 and tfi <= clips[p].GetEnd().__round__(): return clips[p]
-        else: return None
+        else:
+            print(tfi, v, clip_ins, p, clip_ins[p])
+            return None
 
     def get_source_frame_in(self, tfi: int, v: int) -> int:
         clip = self.get_clip_of(tfi, v)
+        require_start_offset(clip)
         if clip is None: return -1
         clip_start = clip.GetStart().__round__()
         clip_source_start = clip.GetSourceStartFrame()
+        if require_start_offset(clip): clip_source_start += 1
         sfi = tfi - clip_start + clip_source_start
         return sfi
 
@@ -763,6 +776,10 @@ class MarkerSequence:
                 current_clip_markers: dict[int, Marker] = {}
                 fi = fis[i]
                 clip = self.get_clip_of(fi,v_track)
+                if clip is None:
+                    print(f"Dropped invalid marker at {fi}")
+                    i += 1
+                    continue
                 clip_range = range(clip.GetStart().__round__(), clip.GetEnd().__round__())
                 for j in range(i, len(fis)):
                     fi = fis[j]

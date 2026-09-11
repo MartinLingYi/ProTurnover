@@ -1,6 +1,11 @@
 # 关于ProScripts
 原`ProTurnover`现在隆重升级为`ProScripts`。`ProScripts`预计带来包括`ProMarkers`、`ProGoto`、`ProTimelineIO`等全新脚本，分别对应片段标记管理、时间线跳转和更完善的 EDL IO 功能。
 
+## 注意
+达芬奇21.1的API有较多修改。目前不确定旧版API是否可用、也不确定旧版API何时会停用。已经完成对ProTurnover使用API的调整工作。但是**其依赖库PTLib仍然在使用许多旧版API的调用方法**，目前**无法评估这是否会影响ProTurnover的相关功能**。请谨慎更新达芬奇21.1。
+
+已经探明达芬奇21.1存在一种对`TimelineItem.GetSourceStartFrame()`的计算特性。详见`Utils/PTLib.py/require_start_offset()`。目前**尚未评估其对ProTurnover及其他工具脚本的影响**。
+
 ## 写在开头
 达芬奇在 21.1 版本中添加了内置 MCP 服务器，同时在 script 目录中添加了完整的 pyi 和开发文档。从此，Agent 也将具有完善的达芬奇脚本开发能力。更进一步的， Agent 也极有可能代替一名剪辑助理。
 
