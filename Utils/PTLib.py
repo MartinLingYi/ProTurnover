@@ -12,15 +12,6 @@ if TYPE_CHECKING:
 
 #region Static Methods
 
-def require_start_offset(clip: TimelineItem) -> bool:
-    """
-    What the f--k?
-    非常奇怪的特性。对于StartTC不为0的mediaPoolItem，如果其timelineItem的Start也不为0，就需要给其Start补1帧的偏置。
-    """
-    clip_start = clip.GetSourceStartFrame()
-    clip_s_tc = clip.GetMediaPoolItem().GetClipProperty("Start TC")
-    return (clip_s_tc != "00:00:00:00") and (clip_start != 0)
-
 def get_script_dir() -> pathlib.Path:
     """取得脚本所在目录，用于定位 PTAsset 等随脚本分发的资源。
 
@@ -645,8 +636,7 @@ class ClipMarkerSyncer:
     def get(self) -> dict[int, Marker]:
         ret: dict[int, Marker] = {}
         clip_in = round(self.clip.GetStart())
-        clip_s_in: int = self.clip.GetSourceStartFrame()
-        if require_start_offset(self.clip): clip_s_in += 1
+        clip_s_in: int = int(self.clip.GetLeftOffset())
         markers = self.clip.GetMarkers()
         for m in markers:
             fi = clip_in + m - clip_s_in
@@ -710,16 +700,13 @@ class MarkerSequence:
         p = max(bisect_right(clip_ins, tfi) - 1, 0)
         if len(clips) > p >= 0 and tfi <= clips[p].GetEnd().__round__(): return clips[p]
         else:
-            print(tfi, v, clip_ins, p, clip_ins[p])
             return None
 
     def get_source_frame_in(self, tfi: int, v: int) -> int:
         clip = self.get_clip_of(tfi, v)
-        require_start_offset(clip)
         if clip is None: return -1
         clip_start = clip.GetStart().__round__()
-        clip_source_start = clip.GetSourceStartFrame()
-        if require_start_offset(clip): clip_source_start += 1
+        clip_source_start = int(clip.GetLeftOffset())
         sfi = tfi - clip_start + clip_source_start
         return sfi
 
@@ -767,26 +754,57 @@ class MarkerSequence:
             if v_track not in self.m_seq: self.m_seq[v_track] = {}
             self.m_seq[v_track][fi] = Marker(sfi, resolve_marker_info)
 
+    def get_all_markers_of(self, timeline_frame_in: int, v_track: int) -> tuple[TimelineItem|None,dict[int, Marker], int]:
+        fis = list(self.m_seq[v_track].keys())
+        markers = list(self.m_seq[v_track].values())
+        fi = timeline_frame_in
+        i: int
+        if fi in fis : i = fis.index(fi)
+        else: i = len(fis) - 1
+        current_clip_markers: dict[int, Marker] = {}
+
+        clip = self.get_clip_of(fi, v_track)
+        if clip is None:
+            print(f"Dropped invalid marker at {fi}")
+            return None,current_clip_markers, i
+        clip_range = range(clip.GetStart().__round__(), clip.GetEnd().__round__())
+        for j in range(i, len(fis)):
+            fi = fis[j]
+            marker = markers[j]
+            if fi in clip_range:
+                current_clip_markers[fi] = marker
+                # j-i > 1 说明给入的marker sequence是无序的，那就不能以顺序的方式处理目标片段指针（i）
+                if j - i == 1: i = j
+        return clip,current_clip_markers, i
+
+
+
+
+
     def write(self):
         for v_track in self.m_seq:
             fis = list(self.m_seq[v_track].keys())
-            markers = list(self.m_seq[v_track].values())
             i = 0
             while i < len(fis):
-                current_clip_markers: dict[int, Marker] = {}
-                fi = fis[i]
-                clip = self.get_clip_of(fi,v_track)
+                (clip, current_clip_markers, i) = self.get_all_markers_of(fis[i],v_track)
                 if clip is None:
-                    print(f"Dropped invalid marker at {fi}")
-                    i += 1
+                    i+=1
                     continue
-                clip_range = range(clip.GetStart().__round__(), clip.GetEnd().__round__())
-                for j in range(i, len(fis)):
-                    fi = fis[j]
-                    marker = markers[j]
-                    if fi in clip_range:
-                        current_clip_markers[fi] = marker
-                        i = j
-
                 ClipMarkerSyncer(clip).set(current_clip_markers)
                 i+=1
+        # 然后处理需要删除的marker
+        expect_seq = self.m_seq.copy()
+        self.load()
+        for v_track in self.m_seq:
+            fis: list[int] = list(self.m_seq[v_track].keys())
+            if v_track in expect_seq.keys(): fis = [fi for fi in fis if fi not in expect_seq[v_track]]
+            i = 0
+            while i < len(fis):
+                (clip, current_clip_markers, i) = self.get_all_markers_of(fis[i],v_track)
+                if clip is None:
+                    i+=1
+                    continue
+                ClipMarkerSyncer(clip).set({})
+                i+=1
+        self.load()
+
