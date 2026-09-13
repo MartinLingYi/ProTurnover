@@ -210,7 +210,7 @@ def on_generate_subclip():
     vfx_title_edl = EDL(f"VFX_ID_{fps}P")
     index = 1
     for pt in pts:
-        pt_ss = pt.GetSourceStartFrame()
+        pt_ss = pt.GetLeftOffset()
         pt_se = pt.GetSourceEndFrame()
         vfx_title_edl.items.append({EDL.EDLDataType.index: f"{index:03d}",
                                     EDL.EDLDataType.reel_name: f"{pt.GetName()}",
@@ -282,7 +282,7 @@ def on_extract_timeline():
         for data in fx_datas:
             for clip in fx_datas[data]:
                 offset = to_frame_count(clip.GetMediaPoolItem().GetClipProperty("Start TC"), fps)
-                csi = clip.GetSourceStartFrame() - handle_var.get() + offset
+                csi = clip.GetLeftOffset() - handle_var.get() + offset
                 cso = clip.GetSourceEndFrame() + handle_var.get() + offset
                 di_edl.append_item({
                     EDL.EDLDataType.edl_clip_name: clip.GetName(),
@@ -339,7 +339,7 @@ def on_export_shotlist():
         shotlist[vt.GetName()] = {
             "Mark In": mi,
             "Mark Out": mo,
-            "Cut In": vt.GetSourceStartFrame(),
+            "Cut In": vt.GetLeftOffset(),
             "Cut Out": vt.GetSourceEndFrame(),
             "Comments": vt.GetMediaPoolItem().GetClipProperty("Comments"),
             "VFX Shot #": vt.GetMediaPoolItem().GetClipProperty("VFX Shot #"),
